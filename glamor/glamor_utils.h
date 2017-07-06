@@ -751,9 +751,8 @@ gl_iformat_for_pixmap(PixmapPtr pixmap)
     glamor_screen_private *glamor_priv =
         glamor_get_screen_private((pixmap)->drawable.pScreen);
 
-    if (glamor_priv->gl_flavor == GLAMOR_GL_DESKTOP &&
-        ((pixmap)->drawable.depth == 1 || (pixmap)->drawable.depth == 8)) {
-        return glamor_priv->one_channel_format;
+    if (((pixmap)->drawable.depth == 1 || (pixmap)->drawable.depth == 8)) {
+        return GL_ALPHA;
     } else {
         return GL_RGBA;
     }
@@ -1299,6 +1298,13 @@ glamor_glDrawArrays_GL_QUADS(glamor_screen_private *glamor_priv, unsigned count)
         glDrawArrays(GL_QUADS, 0, count * 4);
     } else {
         glamor_gldrawarrays_quads_using_indices(glamor_priv, count);
+
+		// GLint fbo = 0;
+		// glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fbo);
+		// if(0 != fbo) {
+		// 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		// 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+		// }
     }
 }
 

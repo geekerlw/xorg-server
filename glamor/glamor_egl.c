@@ -29,6 +29,7 @@
 
 #include "dix-config.h"
 
+#define GLAMOR_GLES2
 #define GLAMOR_FOR_XORG
 #include <unistd.h>
 #include <fcntl.h>
@@ -340,23 +341,29 @@ glamor_egl_create_textured_pixmap_from_gbm_bo(PixmapPtr pixmap, void *bo)
     ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
     struct glamor_screen_private *glamor_priv =
         glamor_get_screen_private(screen);
+    struct glamor_pixmap_private *pixmap_priv =
+        glamor_get_pixmap_private(pixmap);
     struct glamor_egl_screen_private *glamor_egl;
     EGLImageKHR image;
     GLuint texture;
     Bool ret = FALSE;
 
+    if (pixmap_priv->bo)
+    	gbm_bo_unref(pixmap_priv->bo);
     glamor_egl = glamor_egl_get_screen_private(scrn);
 
     glamor_make_current(glamor_priv);
 
     image = eglCreateImageKHR(glamor_egl->display,
-                              glamor_egl->context,
+                              /* glamor_egl->context*/ EGL_NO_CONTEXT,
                               EGL_NATIVE_PIXMAP_KHR, bo, NULL);
     if (image == EGL_NO_IMAGE_KHR) {
         glamor_set_pixmap_type(pixmap, GLAMOR_DRM_ONLY);
         goto done;
     }
     glamor_create_texture_from_image(screen, image, &texture);
+    pixmap_priv->bo = bo;
+    gbm_bo_ref(bo);
     glamor_set_pixmap_type(pixmap, GLAMOR_TEXTURE_DRM);
     glamor_set_pixmap_texture(pixmap, texture);
     glamor_egl_set_pixmap_image(pixmap, image);
@@ -446,6 +453,7 @@ glamor_make_pixmap_exportable(PixmapPtr pixmap)
         gbm_bo_destroy(bo);
         return FALSE;
     }
+    pixmap->devKind = gbm_bo_get_stride(bo);
     gbm_bo_destroy(bo);
 
     scratch_gc = GetScratchGC(pixmap->drawable.depth, screen);
@@ -478,9 +486,12 @@ glamor_gbm_bo_from_pixmap(ScreenPtr screen, PixmapPtr pixmap)
 
     if (!glamor_make_pixmap_exportable(pixmap))
         return NULL;
-
+    gbm_bo_ref(pixmap_priv->bo);
+    return pixmap_priv->bo;
+#if 0
     return gbm_bo_import(glamor_egl->gbm, GBM_BO_IMPORT_EGL_IMAGE,
                          pixmap_priv->image, 0);
+#endif
 }
 
 int
@@ -601,6 +612,10 @@ glamor_egl_destroy_pixmap_image(PixmapPtr pixmap)
         eglDestroyImageKHR(glamor_egl->display, pixmap_priv->image);
         pixmap_priv->image = NULL;
     }
+
+	if (pixmap_priv->bo)
+		gbm_bo_destroy(pixmap_priv->bo);
+
 }
 
 _X_EXPORT void
@@ -611,12 +626,16 @@ glamor_egl_exchange_buffers(PixmapPtr front, PixmapPtr back)
         glamor_get_pixmap_private(front);
     struct glamor_pixmap_private *back_priv =
         glamor_get_pixmap_private(back);
+    struct gbm_bo *temp_bo;
 
     glamor_pixmap_exchange_fbos(front, back);
 
     temp = back_priv->image;
     back_priv->image = front_priv->image;
     front_priv->image = temp;
+    temp_bo = back_priv->bo;
+    back_priv->bo = front_priv->bo;
+    front_priv->bo = temp_bo;
 
     glamor_set_pixmap_type(front, GLAMOR_TEXTURE_DRM);
     glamor_set_pixmap_type(back, GLAMOR_TEXTURE_DRM);
@@ -801,6 +820,21 @@ glamor_egl_init(ScrnInfoPtr scrn, int fd)
         EGL_NONE
     };
 
+    const EGLint config_attribs_gles2[] = {
+        EGL_RED_SIZE, 8,
+        EGL_GREEN_SIZE, 8,
+        EGL_BLUE_SIZE, 8,
+        EGL_ALPHA_SIZE, 8,
+        EGL_DEPTH_SIZE, 24,
+        EGL_STENCIL_SIZE, 8,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+	    EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+	    EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+        EGL_NONE
+    };
+    EGLint num_configs;
+    EGLConfig egl_config;
+
     glamor_identify(0);
     glamor_egl = calloc(sizeof(*glamor_egl), 1);
     if (glamor_egl == NULL)
@@ -816,7 +850,8 @@ glamor_egl_init(ScrnInfoPtr scrn, int fd)
         ErrorF("couldn't get display device\n");
         goto error;
     }
-    glamor_egl->display = eglGetDisplay(glamor_egl->gbm);
+    //glamor_egl->display = eglGetDisplay(glamor_egl->gbm);
+	glamor_egl->display = eglGetPlatformDisplayEXT(EGL_PLATFORM_GBM_KHR, glamor_egl->gbm, NULL);
 #else
     glamor_egl->display = eglGetDisplay((EGLNativeDisplayType) (intptr_t) fd);
 #endif
@@ -842,7 +877,7 @@ glamor_egl_init(ScrnInfoPtr scrn, int fd)
 #define GLAMOR_CHECK_EGL_EXTENSION(EXT)  \
 	if (!epoxy_has_egl_extension(glamor_egl->display, "EGL_" #EXT)) {  \
 		ErrorF("EGL_" #EXT " required.\n");  \
-		goto error;  \
+/*		goto error; */ \
 	}
 
 #define GLAMOR_CHECK_EGL_EXTENSIONS(EXT1, EXT2)	 \
@@ -852,10 +887,11 @@ glamor_egl_init(ScrnInfoPtr scrn, int fd)
 		goto error;  \
 	}
 
-    GLAMOR_CHECK_EGL_EXTENSION(MESA_drm_image);
     GLAMOR_CHECK_EGL_EXTENSION(KHR_gl_renderbuffer_image);
 #ifdef GLAMOR_GLES2
-    GLAMOR_CHECK_EGL_EXTENSIONS(KHR_surfaceless_context, KHR_surfaceless_gles2);
+ GLAMOR_CHECK_EGL_EXTENSION(KHR_surfaceless_context);
+    GLAMOR_CHECK_EGL_EXTENSION(KHR_surfaceless_gles2);
+//    GLAMOR_CHECK_EGL_EXTENSIONS(KHR_surfaceless_context, KHR_surfaceless_gles2);
 #else
     GLAMOR_CHECK_EGL_EXTENSIONS(KHR_surfaceless_context,
                                 KHR_surfaceless_opengl);
@@ -865,23 +901,31 @@ glamor_egl_init(ScrnInfoPtr scrn, int fd)
     glamor_egl->context = eglCreateContext(glamor_egl->display,
                                            NULL, EGL_NO_CONTEXT,
                                            config_attribs_core);
+
 #else
     glamor_egl->context = NULL;
 #endif
-    if (!glamor_egl->context) {
-        glamor_egl->context = eglCreateContext(glamor_egl->display,
-                                               NULL, EGL_NO_CONTEXT,
-                                               config_attribs);
-        if (glamor_egl->context == EGL_NO_CONTEXT) {
-            xf86DrvMsg(scrn->scrnIndex, X_ERROR, "Failed to create EGL context\n");
-            goto error;
-        }
+    if (!eglChooseConfig(glamor_egl->display, config_attribs_gles2, 0, 0, &num_configs)) {
+        ErrorF("eglChooseConfig Fail to get Confings\n");
+        return false;
+    }
+
+    if (!eglChooseConfig(glamor_egl->display, config_attribs_gles2, &egl_config, 1, &num_configs)) {
+        ErrorF("Fail to get Config, num_configs=%d\n",num_configs);
+        return false;
+    }
+    glamor_egl->context = eglCreateContext(glamor_egl->display,
+                                           egl_config, EGL_NO_CONTEXT,
+                                           config_attribs);
+    if (glamor_egl->context == EGL_NO_CONTEXT) {
+        xf86DrvMsg(scrn->scrnIndex, X_ERROR, "Failed to create EGL context\n");
+        goto error;
     }
 
     if (!eglMakeCurrent(glamor_egl->display,
                         EGL_NO_SURFACE, EGL_NO_SURFACE, glamor_egl->context)) {
         xf86DrvMsg(scrn->scrnIndex, X_ERROR,
-                   "Failed to make EGL context current\n");
+                   "Failed to make EGL context currentgl%x egl%x\n", glGetError(), eglGetError());
         goto error;
     }
 #ifdef GLAMOR_HAS_GBM

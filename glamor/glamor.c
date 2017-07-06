@@ -190,6 +190,10 @@ glamor_create_pixmap(ScreenPtr screen, int w, int h, int depth,
     if (w > 32767 || h > 32767)
         return NullPixmap;
 
+    if (depth == 8 && usage != GLAMOR_CREATE_FBO_NO_FBO ||
+	(w == h && w == 24 && depth == 32)) {
+        return fbCreatePixmap(screen, w, h, depth, usage);
+    }
     if ((usage == GLAMOR_CREATE_PIXMAP_CPU
          || (usage == CREATE_PIXMAP_USAGE_GLYPH_PICTURE &&
              w <= glamor_priv->glyph_max_dim &&
@@ -263,7 +267,7 @@ glamor_block_handler(ScreenPtr screen)
 
     glamor_make_current(glamor_priv);
     glamor_priv->tick++;
-    glFlush();
+    glFinish();
     glamor_fbo_expire(glamor_priv);
 }
 
@@ -278,7 +282,7 @@ _glamor_block_handler(ScreenPtr screen, void *timeout, void *readmask)
     screen->BlockHandler = _glamor_block_handler;
 
     glamor_make_current(glamor_priv);
-    glFlush();
+    glFinish();
 }
 
 static void
@@ -595,7 +599,7 @@ glamor_init(ScreenPtr screen, unsigned int flags)
     if (glamor_priv->gl_flavor == GLAMOR_GL_DESKTOP)
         glamor_priv->has_rw_pbo = TRUE;
 
-    glamor_priv->has_khr_debug = epoxy_has_gl_extension("GL_KHR_debug");
+    glamor_priv->has_khr_debug = 0;//epoxy_has_gl_extension("GL_KHR_debug");
     glamor_priv->has_pack_invert =
         epoxy_has_gl_extension("GL_MESA_pack_invert");
     glamor_priv->has_fbo_blit =

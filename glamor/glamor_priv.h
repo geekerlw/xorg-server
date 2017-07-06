@@ -43,6 +43,18 @@
 #include <epoxy/egl.h>
 #endif
 
+#ifdef GLAMOR_HAS_GBM
+#include <gbm.h>
+#include <drm_fourcc.h>
+
+int
+gbm_bo_ref(struct gbm_bo *bo);
+
+int
+gbm_bo_unref(struct gbm_bo *bo);
+
+#endif
+
 #define GLAMOR_DEFAULT_PRECISION  \
     "#ifdef GL_ES\n"              \
     "precision mediump float;\n"  \
@@ -407,6 +419,7 @@ typedef struct glamor_pixmap_private {
      * names.
      */
     glamor_pixmap_fbo **fbo_array;
+    struct gbm_bo *bo;
 } glamor_pixmap_private;
 
 extern DevPrivateKeyRec glamor_pixmap_private_key;

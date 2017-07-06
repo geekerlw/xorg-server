@@ -35,7 +35,6 @@
 #ifdef HAVE_DIX_CONFIG_H
 #include "dix-config.h"
 #endif
-
 #include <time.h>
 #include "list.h"
 #include "xf86.h"
@@ -410,6 +409,7 @@ ms_dri2_frame_event_handler(uint64_t msc,
     ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
     uint32_t tv_sec = usec / 1000000;
     uint32_t tv_usec = usec % 1000000;
+    modesettingPtr ms = modesettingPTR(scrn);
 
     if (!drawable) {
         ms_dri2_del_frame_event(frame_info);
@@ -614,7 +614,7 @@ ms_dri2_schedule_swap(ClientPtr client, DrawablePtr draw,
     uint64_t current_msc, current_ust;
     uint64_t request_msc;
     uint32_t seq;
-
+    
     /* Drawable not displayed... just complete the swap */
     if (!crtc)
         goto blit_fallback;

@@ -80,3 +80,7 @@ core
 doltcompile
 doltlibtool
 xserver.ent
+tags
+cscope.out
+cscope.in.out
+cscope.po.out
