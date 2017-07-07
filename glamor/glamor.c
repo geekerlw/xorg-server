@@ -267,7 +267,7 @@ glamor_block_handler(ScreenPtr screen)
 
     glamor_make_current(glamor_priv);
     glamor_priv->tick++;
-    glFinish();
+    glFlush();
     glamor_fbo_expire(glamor_priv);
 }
 
@@ -282,7 +282,7 @@ _glamor_block_handler(ScreenPtr screen, void *timeout, void *readmask)
     screen->BlockHandler = _glamor_block_handler;
 
     glamor_make_current(glamor_priv);
-    glFinish();
+    glFlush();
 }
 
 static void

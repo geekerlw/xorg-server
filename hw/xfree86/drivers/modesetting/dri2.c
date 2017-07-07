@@ -35,6 +35,7 @@
 #ifdef HAVE_DIX_CONFIG_H
 #include "dix-config.h"
 #endif
+
 #include <time.h>
 #include "list.h"
 #include "xf86.h"
@@ -614,7 +615,7 @@ ms_dri2_schedule_swap(ClientPtr client, DrawablePtr draw,
     uint64_t current_msc, current_ust;
     uint64_t request_msc;
     uint32_t seq;
-    
+
     /* Drawable not displayed... just complete the swap */
     if (!crtc)
         goto blit_fallback;
