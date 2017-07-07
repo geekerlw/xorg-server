@@ -410,7 +410,6 @@ ms_dri2_frame_event_handler(uint64_t msc,
     ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
     uint32_t tv_sec = usec / 1000000;
     uint32_t tv_usec = usec % 1000000;
-    modesettingPtr ms = modesettingPTR(scrn);
 
     if (!drawable) {
         ms_dri2_del_frame_event(frame_info);
